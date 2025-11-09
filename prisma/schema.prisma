@@ -1,0 +1,170 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  phone     String?
+  age       Int?
+  avatar    String?
+  role      Role     @default(ATHLETE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  athleteProfile AthleteProfile?
+  coachProfile   CoachProfile?
+
+  @@map("users")
+}
+
+model AthleteProfile {
+  id               String            @id @default(cuid())
+  userId           String            @unique
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  level            Level             @default(BEGINNER)
+  status           AthleteStatus     @default(ACTIVE)
+  currentPlanId    String?
+  currentPlan      TrainingPlan?     @relation(fields: [currentPlanId], references: [id])
+  currentProgress  Int               @default(0)
+  completedTrainings Int             @default(0)
+  averageTime      String?
+  averagePace      String?
+
+  // Relations
+  trainings        Training[]
+  activities       Activity[]
+  coachId          String?
+  coach            CoachProfile?     @relation(fields: [coachId], references: [id])
+
+  @@map("athlete_profiles")
+}
+
+model CoachProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Relations
+  athletes    AthleteProfile[]
+  trainingPlans TrainingPlan[]
+
+  @@map("coach_profiles")
+}
+
+model TrainingPlan {
+  id            String         @id @default(cuid())
+  name          String
+  category      PlanCategory
+  duration      Int            // weeks
+  daysPerWeek   Int
+  status        PlanStatus     @default(ACTIVE)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  // Relations
+  createdById   String
+  createdBy     CoachProfile   @relation(fields: [createdById], references: [id])
+  athletes      AthleteProfile[]
+  trainings     Training[]
+
+  @@map("training_plans")
+}
+
+model Training {
+  id          String        @id @default(cuid())
+  date        DateTime
+  type        TrainingType
+  distance    String
+  duration    String
+  pace        String
+  notes       String?
+  status      TrainingStatus @default(PENDING)
+  weekNumber  Int?
+  
+  // Relations
+  athleteId   String
+  athlete     AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  planId      String?
+  plan        TrainingPlan?  @relation(fields: [planId], references: [id])
+  
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@map("trainings")
+}
+
+model Activity {
+  id          String   @id @default(cuid())
+  type        String
+  distance    String
+  time        String
+  pace        String?
+  notes       String?
+  
+  // Relations
+  athleteId   String
+  athlete     AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+
+  @@map("activities")
+}
+
+enum Role {
+  ATHLETE
+  COACH
+  ADMIN
+}
+
+enum Level {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum AthleteStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+}
+
+enum PlanCategory {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  FIVE_K
+  TEN_K
+  HALF_MARATHON
+  MARATHON
+}
+
+enum PlanStatus {
+  ACTIVE
+  DRAFT
+  ARCHIVED
+}
+
+enum TrainingType {
+  CONTINUOUS_RUN
+  INTERVAL_TRAINING
+  LONG_RUN
+  FARTLEK
+  HILL_TRAINING
+  LIGHT_JOG
+  RECOVERY_RUN
+}
+
+enum TrainingStatus {
+  PENDING
+  COMPLETED
+  MISSED
+}
