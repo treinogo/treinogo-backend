@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: treinogo-backend
+    env: node
+    buildCommand: ./render-deploy.sh
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: treinogo-db
+          property: connectionString
+    autoDeploy: false
