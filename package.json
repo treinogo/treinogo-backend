@@ -9,6 +9,8 @@
     "dev:debug": "nodemon --inspect=0.0.0.0:9229 --exec node -r ts-node/register src/index.ts",
     "build": "prisma generate && tsc",
     "postbuild": "prisma migrate deploy",
+    "deploy": "prisma migrate deploy && prisma generate && npm run build",
+    "db:test": "node test-db.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",

@@ -39,14 +39,30 @@ NODE_ENV=production
 
 ### 5. **Deploy Manual (se necessário):**
 
-Se precisar executar as migrações manualmente:
+Se as tabelas ainda não foram criadas, execute no Shell do Render:
 
 ```bash
-# Conectar ao shell do Render
+# Opção 1: Push do schema (recomendado para primeira vez)
+npx prisma db push --accept-data-loss
+
+# Opção 2: Executar migrações
 npx prisma migrate deploy
 
-# Ou resetar e recriar (CUIDADO - apaga dados!)
-npx prisma migrate reset --force
+# Opção 3: Verificar status
+npx prisma migrate status
+
+# Opção 4: Debug
+./debug-migrations.sh
+```
+
+### 6. **Comandos de Emergência:**
+
+```bash
+# Se nada funcionar, force a criação das tabelas:
+npx prisma db push --force-reset --accept-data-loss
+
+# Verificar se as tabelas foram criadas:
+npx prisma db seed # (se você tiver um arquivo de seed)
 ```
 
 ### 6. **Verificação:**
