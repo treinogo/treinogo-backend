@@ -5,6 +5,10 @@ import authRoutes from './routes/auth';
 import userRoutes from './routes/users';
 import trainingRoutes from './routes/trainings';
 import planRoutes from './routes/plans';
+import challengeRoutes from './routes/challenges';
+import physicalTestRoutes from './routes/physical-tests';
+import raceRoutes from './routes/races';
+import dashboardRoutes from './routes/dashboard';
 
 dotenv.config();
 
@@ -13,7 +17,8 @@ const PORT = process.env.PORT || 3001;
 
 // Middlewares
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173']
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'],
+  credentials: true
 }));
 app.use(express.json());
 
@@ -22,6 +27,10 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/trainings', trainingRoutes);
 app.use('/api/plans', planRoutes);
+app.use('/api/challenges', challengeRoutes);
+app.use('/api/physical-tests', physicalTestRoutes);
+app.use('/api/races', raceRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
