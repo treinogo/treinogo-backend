@@ -15,27 +15,67 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// CORS Configuration - Allow all origins for production deployment
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-  } else {
-    next();
+// Parse allowed origins from environment variable
+const getAllowedOrigins = (): string[] => {
+  const origins = process.env.ALLOWED_ORIGINS;
+  if (!origins) {
+    console.warn('⚠️  ALLOWED_ORIGINS not set, allowing all origins');
+    return [];
   }
-});
+  
+  // Split by comma and trim whitespace, remove trailing slashes
+  const parsedOrigins = origins
+    .split(',')
+    .map(origin => origin.trim().replace(/\/$/, ''))
+    .filter(origin => origin.length > 0);
+  
+  console.log('🌍 Allowed origins:', parsedOrigins);
+  return parsedOrigins;
+};
 
-// Backup CORS middleware
+const allowedOrigins = getAllowedOrigins();
+
+// CORS Configuration
 app.use(cors({
-  origin: true,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or Postman)
+    if (!origin) return callback(null, true);
+    
+    // If no allowed origins are set, allow all
+    if (allowedOrigins.length === 0) {
+      return callback(null, true);
+    }
+    
+    // Check if the origin is in the allowed list
+    const isAllowed = allowedOrigins.some(allowedOrigin => {
+      // Exact match
+      if (origin === allowedOrigin) return true;
+      // Match without trailing slash
+      if (origin === allowedOrigin.replace(/\/$/, '')) return true;
+      // Match with trailing slash
+      if (origin + '/' === allowedOrigin) return true;
+      return false;
+    });
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      console.warn(`🚫 CORS blocked origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  optionsSuccessStatus: 200
 }));
+// Debug middleware to log requests
+app.use((req, res, next) => {
+  const origin = req.get('Origin') || req.get('Referer') || 'No origin';
+  console.log(`📥 ${req.method} ${req.path} - Origin: ${origin}`);
+  next();
+});
+
 app.use(express.json());
 
 // Routes

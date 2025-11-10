@@ -268,4 +268,107 @@ router.get('/upcoming-races', auth_1.authenticate, (0, auth_1.authorizeRole)(['C
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+// GET /api/dashboard/recent-activities - Get recent activities
+router.get('/recent-activities', auth_1.authenticate, (0, auth_1.authorizeRole)(['COACH']), async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { limit = 10 } = req.query;
+        const coach = await prisma.coachProfile.findUnique({
+            where: { userId }
+        });
+        if (!coach) {
+            return res.status(403).json({ error: 'Access denied. Coach profile required.' });
+        }
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const atividadesRecentes = [];
+        // Recent plans
+        const recentPlans = await prisma.trainingPlan.findMany({
+            where: {
+                createdById: coach.id,
+                createdAt: { gte: thirtyDaysAgo }
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 5
+        });
+        recentPlans.forEach(plan => {
+            atividadesRecentes.push({
+                id: plan.id,
+                tipo: 'plano',
+                descricao: `Plano "${plan.name}" foi criado`,
+                data: plan.createdAt
+            });
+        });
+        // Recent challenges
+        const recentChallenges = await prisma.challenge.findMany({
+            where: {
+                createdById: coach.id,
+                createdAt: { gte: thirtyDaysAgo }
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 5
+        });
+        recentChallenges.forEach(challenge => {
+            atividadesRecentes.push({
+                id: challenge.id,
+                tipo: 'desafio',
+                descricao: `Desafio "${challenge.name}" foi criado`,
+                data: challenge.createdAt
+            });
+        });
+        // Recent athletes
+        const recentAthletes = await prisma.athleteProfile.findMany({
+            where: {
+                coachId: coach.id,
+                user: {
+                    createdAt: { gte: thirtyDaysAgo }
+                }
+            },
+            include: {
+                user: { select: { name: true, createdAt: true } }
+            },
+            orderBy: { user: { createdAt: 'desc' } },
+            take: 5
+        });
+        recentAthletes.forEach(athlete => {
+            atividadesRecentes.push({
+                id: athlete.id,
+                tipo: 'aluno',
+                descricao: `${athlete.user.name} se inscreveu como aluno`,
+                data: athlete.user.createdAt
+            });
+        });
+        // Recent physical tests
+        const recentTests = await prisma.physicalTest.findMany({
+            where: {
+                athlete: { coachId: coach.id },
+                createdAt: { gte: thirtyDaysAgo }
+            },
+            include: {
+                athlete: {
+                    include: {
+                        user: { select: { name: true } }
+                    }
+                }
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 5
+        });
+        recentTests.forEach(test => {
+            atividadesRecentes.push({
+                id: test.id,
+                tipo: 'aluno',
+                descricao: `${test.athlete.user.name} realizou teste de ${test.testType}`,
+                data: test.createdAt
+            });
+        });
+        // Sort all activities by date and limit
+        atividadesRecentes.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+        res.json({ atividadesRecentes: atividadesRecentes.slice(0, parseInt(limit)) });
+    }
+    catch (error) {
+        console.error('Get recent activities error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 exports.default = router;

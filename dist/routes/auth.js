@@ -11,7 +11,7 @@ const router = express_1.default.Router();
 // Register
 router.post('/register', async (req, res) => {
     try {
-        const { email, password, name, role = 'ATHLETE' } = req.body;
+        const { email, password, name, role = 'ATHLETE', coachId } = req.body;
         // Check if user exists
         const existingUser = await prisma_1.prisma.user.findUnique({
             where: { email }
@@ -33,7 +33,10 @@ router.post('/register', async (req, res) => {
         // Create profile based on role
         if (role === 'ATHLETE') {
             await prisma_1.prisma.athleteProfile.create({
-                data: { userId: user.id }
+                data: {
+                    userId: user.id,
+                    coachId: coachId || null // Associate with coach if provided
+                }
             });
         }
         else if (role === 'COACH') {
@@ -95,6 +98,76 @@ router.post('/login', async (req, res) => {
     }
     catch (error) {
         console.error('Login error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Register athlete by coach (authenticated)
+router.post('/register-athlete', async (req, res) => {
+    try {
+        // This endpoint requires authentication middleware
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+            return res.status(401).json({ error: 'Access denied. No token provided.' });
+        }
+        const token = authHeader.split(' ')[1];
+        if (!token) {
+            return res.status(401).json({ error: 'Access denied. Invalid token format.' });
+        }
+        let decoded;
+        try {
+            decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
+        }
+        catch (error) {
+            return res.status(401).json({ error: 'Invalid token.' });
+        }
+        // Get coach profile
+        const coachProfile = await prisma_1.prisma.coachProfile.findUnique({
+            where: { userId: decoded.userId }
+        });
+        if (!coachProfile) {
+            return res.status(403).json({ error: 'Access denied. Coach profile required.' });
+        }
+        const { email, name, phone, age } = req.body;
+        // Check if user exists
+        const existingUser = await prisma_1.prisma.user.findUnique({
+            where: { email }
+        });
+        if (existingUser) {
+            return res.status(400).json({ error: 'User already exists' });
+        }
+        // Hash default password
+        const hashedPassword = await bcryptjs_1.default.hash('123456', 12);
+        // Create user
+        const user = await prisma_1.prisma.user.create({
+            data: {
+                email,
+                password: hashedPassword,
+                name,
+                phone,
+                age: age ? parseInt(age) : null,
+                role: 'ATHLETE'
+            }
+        });
+        // Create athlete profile with coach association
+        const athleteProfile = await prisma_1.prisma.athleteProfile.create({
+            data: {
+                userId: user.id,
+                coachId: coachProfile.id
+            }
+        });
+        res.status(201).json({
+            message: 'Athlete created successfully',
+            user: {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                role: user.role
+            },
+            athleteProfile
+        });
+    }
+    catch (error) {
+        console.error('Register athlete error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
