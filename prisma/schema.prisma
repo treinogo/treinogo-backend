@@ -22,6 +22,7 @@ model User {
   // Relations
   athleteProfile AthleteProfile?
   coachProfile   CoachProfile?
+  notifications  Notification[]
 
   @@map("users")
 }
@@ -258,6 +259,19 @@ model WeeklyProgramming {
   @@map("weekly_programming")
 }
 
+model Notification {
+  id          String            @id @default(cuid())
+  title       String
+  message     String
+  type        NotificationType  @default(INFO)
+  isRead      Boolean           @default(false)
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime          @default(now())
+
+  @@map("notifications")
+}
+
 enum ChallengeStatus {
   ACTIVE
   COMPLETED
@@ -274,4 +288,11 @@ enum TimeOfDay {
   MORNING
   AFTERNOON
   EVENING
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
 }

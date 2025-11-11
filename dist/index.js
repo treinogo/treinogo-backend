@@ -14,6 +14,7 @@ const challenges_1 = __importDefault(require("./routes/challenges"));
 const physical_tests_1 = __importDefault(require("./routes/physical-tests"));
 const races_1 = __importDefault(require("./routes/races"));
 const dashboard_1 = __importDefault(require("./routes/dashboard"));
+const notifications_1 = __importDefault(require("./routes/notifications"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3001;
@@ -85,6 +86,7 @@ app.use('/api/challenges', challenges_1.default);
 app.use('/api/physical-tests', physical_tests_1.default);
 app.use('/api/races', races_1.default);
 app.use('/api/dashboard', dashboard_1.default);
+app.use('/api/notifications', notifications_1.default);
 // Health check
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', message: 'Treinogo Backend is running!' });

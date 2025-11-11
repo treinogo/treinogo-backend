@@ -7,6 +7,69 @@ const express_1 = __importDefault(require("express"));
 const prisma_1 = require("../lib/prisma");
 const auth_1 = require("../middleware/auth");
 const router = express_1.default.Router();
+// Helper function to generate trainings from weekly programming
+async function generateTrainingsForAthlete(planId, athleteId, weeklyProgramming) {
+    const startDate = new Date(); // Start from today
+    const trainingsToCreate = [];
+    weeklyProgramming.forEach((weekProg) => {
+        const weekStartDate = new Date(startDate);
+        weekStartDate.setDate(startDate.getDate() + (weekProg.week - 1) * 7);
+        // Map day names to day numbers (0 = Sunday, 1 = Monday, etc.)
+        const dayMappings = [
+            { key: 'sunday', dayOffset: 0 },
+            { key: 'monday', dayOffset: 1 },
+            { key: 'tuesday', dayOffset: 2 },
+            { key: 'wednesday', dayOffset: 3 },
+            { key: 'thursday', dayOffset: 4 },
+            { key: 'friday', dayOffset: 5 },
+            { key: 'saturday', dayOffset: 6 }
+        ];
+        dayMappings.forEach(({ key, dayOffset }) => {
+            const dayData = weekProg[key];
+            if (dayData) {
+                try {
+                    const trainingData = JSON.parse(dayData);
+                    const trainingDate = new Date(weekStartDate);
+                    // Calculate the exact date for this day of the week
+                    const currentDayOfWeek = weekStartDate.getDay();
+                    const daysToAdd = (dayOffset - currentDayOfWeek + 7) % 7;
+                    trainingDate.setDate(weekStartDate.getDate() + daysToAdd);
+                    // Map training type from frontend to backend enum
+                    const typeMapping = {
+                        'Corrida Contínua': 'CONTINUOUS_RUN',
+                        'Intervalado': 'INTERVAL_TRAINING',
+                        'Longão': 'LONG_RUN',
+                        'Fartlek': 'FARTLEK',
+                        'Prova/Teste': 'INTERVAL_TRAINING', // Fallback
+                        'Descanso': 'RECOVERY_RUN'
+                    };
+                    trainingsToCreate.push({
+                        date: trainingDate,
+                        type: typeMapping[trainingData.tipo] || 'CONTINUOUS_RUN',
+                        distance: trainingData.distancia || '5km',
+                        duration: trainingData.tempo || '30min',
+                        pace: trainingData.pace || '6:00',
+                        notes: trainingData.observacoes || `Treino da semana ${weekProg.week} - ${trainingData.tipo}`,
+                        weekNumber: weekProg.week,
+                        athleteId: athleteId,
+                        planId: planId,
+                        status: 'PENDING'
+                    });
+                }
+                catch (parseError) {
+                    console.error('Error parsing training data:', parseError);
+                }
+            }
+        });
+    });
+    // Create all trainings for this athlete
+    if (trainingsToCreate.length > 0) {
+        await prisma_1.prisma.training.createMany({
+            data: trainingsToCreate
+        });
+    }
+    return trainingsToCreate.length;
+}
 // Get all training plans
 router.get('/', auth_1.authenticate, async (req, res) => {
     try {
@@ -112,7 +175,12 @@ router.post('/:id/assign', auth_1.authenticate, (0, auth_1.authorizeRole)(['COAC
         const { id } = req.params;
         const { athleteId } = req.body;
         const plan = await prisma_1.prisma.trainingPlan.findUnique({
-            where: { id }
+            where: { id },
+            include: {
+                weeklyProgramming: {
+                    orderBy: { week: 'asc' }
+                }
+            }
         });
         if (!plan) {
             return res.status(404).json({ error: 'Plan not found' });
@@ -123,13 +191,19 @@ router.post('/:id/assign', auth_1.authenticate, (0, auth_1.authorizeRole)(['COAC
         if (!athlete) {
             return res.status(404).json({ error: 'Athlete not found' });
         }
+        // Update athlete's current plan
         await prisma_1.prisma.athleteProfile.update({
             where: { id: athleteId },
             data: {
                 currentPlanId: id
             }
         });
-        res.json({ message: 'Plan assigned successfully' });
+        // Generate individual trainings based on weekly programming
+        const trainingsGenerated = await generateTrainingsForAthlete(id, athleteId, plan.weeklyProgramming);
+        res.json({
+            message: 'Plan assigned successfully',
+            trainingsGenerated: trainingsGenerated
+        });
     }
     catch (error) {
         console.error('Assign plan error:', error);
@@ -222,7 +296,12 @@ router.post('/:id/assign-multiple', auth_1.authenticate, (0, auth_1.authorizeRol
             return res.status(400).json({ error: 'athleteIds must be a non-empty array' });
         }
         const plan = await prisma_1.prisma.trainingPlan.findUnique({
-            where: { id }
+            where: { id },
+            include: {
+                weeklyProgramming: {
+                    orderBy: { week: 'asc' }
+                }
+            }
         });
         if (!plan) {
             return res.status(404).json({ error: 'Plan not found' });
@@ -247,7 +326,17 @@ router.post('/:id/assign-multiple', auth_1.authenticate, (0, auth_1.authorizeRol
             where: { id: { in: athleteIds } },
             data: { currentPlanId: id }
         });
-        res.json({ message: 'Plan assigned to multiple athletes successfully' });
+        // Generate trainings for each athlete
+        let totalTrainingsGenerated = 0;
+        for (const athleteId of athleteIds) {
+            const trainingsGenerated = await generateTrainingsForAthlete(id, athleteId, plan.weeklyProgramming);
+            totalTrainingsGenerated += trainingsGenerated;
+        }
+        res.json({
+            message: 'Plan assigned to multiple athletes successfully',
+            athletesCount: athleteIds.length,
+            totalTrainingsGenerated
+        });
     }
     catch (error) {
         console.error('Assign plan to multiple athletes error:', error);
@@ -283,4 +372,148 @@ router.get('/coach/my-plans', auth_1.authenticate, (0, auth_1.authorizeRole)(['C
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+// Get plan progress with athletes statistics
+router.get('/:id/progress', auth_1.authenticate, async (req, res) => {
+    try {
+        const { id } = req.params;
+        // Get the plan with all related data
+        const plan = await prisma_1.prisma.trainingPlan.findUnique({
+            where: { id },
+            include: {
+                athletes: {
+                    include: {
+                        user: {
+                            select: { id: true, name: true, email: true, avatar: true }
+                        },
+                        trainings: {
+                            where: { planId: id },
+                            orderBy: { date: 'desc' }
+                        }
+                    }
+                },
+                weeklyProgramming: true,
+                trainings: {
+                    where: { planId: id }
+                }
+            }
+        });
+        if (!plan) {
+            return res.status(404).json({ error: 'Training plan not found' });
+        }
+        // Calculate total expected trainings per athlete
+        const totalWeeks = plan.duration;
+        const expectedTrainingsPerWeek = plan.daysPerWeek;
+        const totalExpectedTrainings = totalWeeks * expectedTrainingsPerWeek;
+        // Calculate progress for each athlete
+        const athletesProgress = plan.athletes.map(athlete => {
+            const completedTrainings = athlete.trainings.filter(t => t.status === 'COMPLETED').length;
+            const pendingTrainings = athlete.trainings.filter(t => t.status === 'PENDING').length;
+            const missedTrainings = athlete.trainings.filter(t => t.status === 'MISSED').length;
+            const progressPercentage = totalExpectedTrainings > 0
+                ? Math.round((completedTrainings / totalExpectedTrainings) * 100)
+                : 0;
+            // Calculate average pace and time from completed trainings
+            const completedTrainingsList = athlete.trainings.filter(t => t.status === 'COMPLETED');
+            const averageStats = calculateAverageStats(completedTrainingsList);
+            return {
+                id: athlete.user.id,
+                athleteId: athlete.id,
+                nome: athlete.user.name,
+                email: athlete.user.email,
+                foto: athlete.user.avatar,
+                status: athlete.status,
+                level: athlete.level,
+                treinosTotal: totalExpectedTrainings,
+                treinosRealizados: completedTrainings,
+                treinosPendentes: pendingTrainings,
+                treinosPerdidos: missedTrainings,
+                progressoAtual: progressPercentage,
+                statusPlano: progressPercentage === 100 ? 'Concluído' :
+                    progressPercentage > 0 ? 'Ativo' : 'Não realizado',
+                tempoMedio: averageStats.averageTime,
+                ritmoMedio: averageStats.averagePace,
+                ultimoTreino: completedTrainingsList[0] ? {
+                    data: completedTrainingsList[0].date,
+                    tipo: completedTrainingsList[0].type,
+                    distancia: completedTrainingsList[0].distance,
+                    pace: completedTrainingsList[0].pace
+                } : null
+            };
+        });
+        // Calculate plan-wide statistics
+        const totalAthletes = plan.athletes.length;
+        const activeAthletes = athletesProgress.filter(a => a.statusPlano === 'Ativo').length;
+        const completedAthletes = athletesProgress.filter(a => a.statusPlano === 'Concluído').length;
+        const notStartedAthletes = athletesProgress.filter(a => a.statusPlano === 'Não realizado').length;
+        const averageProgress = totalAthletes > 0
+            ? Math.round(athletesProgress.reduce((acc, a) => acc + a.progressoAtual, 0) / totalAthletes)
+            : 0;
+        const planProgress = {
+            id: plan.id,
+            nome: plan.name,
+            categoria: plan.category,
+            duracao: plan.duration,
+            diasPorSemana: plan.daysPerWeek,
+            status: plan.status,
+            totalAlunos: totalAthletes,
+            alunosAtivos: activeAthletes,
+            alunosConcluidos: completedAthletes,
+            alunosNaoIniciados: notStartedAthletes,
+            progressoMedio: averageProgress,
+            treinosTotaisPlanejados: totalExpectedTrainings * totalAthletes,
+            treinosRealizadosTotal: athletesProgress.reduce((acc, a) => acc + a.treinosRealizados, 0),
+            athletes: athletesProgress,
+            weeklyProgramming: plan.weeklyProgramming
+        };
+        res.json({ planProgress });
+    }
+    catch (error) {
+        console.error('Get plan progress error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Helper function to calculate average statistics
+function calculateAverageStats(trainings) {
+    if (trainings.length === 0) {
+        return { averageTime: '-', averagePace: '-' };
+    }
+    // Calculate average pace (assuming pace is in format "MM:SS")
+    const validPaces = trainings.filter(t => t.pace && t.pace !== '-');
+    let averagePace = '-';
+    if (validPaces.length > 0) {
+        const totalSeconds = validPaces.reduce((acc, t) => {
+            const [minutes, seconds] = t.pace.split(':').map(Number);
+            return acc + (minutes * 60 + seconds);
+        }, 0);
+        const avgSeconds = Math.round(totalSeconds / validPaces.length);
+        const avgMinutes = Math.floor(avgSeconds / 60);
+        const remainingSeconds = avgSeconds % 60;
+        averagePace = `${avgMinutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
+    // Calculate average duration (assuming duration is in format "HH:MM" or "MM")  
+    const validDurations = trainings.filter(t => t.duration && t.duration !== '-');
+    let averageTime = '-';
+    if (validDurations.length > 0) {
+        const totalMinutes = validDurations.reduce((acc, t) => {
+            const duration = t.duration;
+            if (duration.includes(':')) {
+                const [hours, minutes] = duration.split(':').map(Number);
+                return acc + (hours * 60 + minutes);
+            }
+            else {
+                return acc + parseInt(duration);
+            }
+        }, 0);
+        const avgMinutes = Math.round(totalMinutes / validDurations.length);
+        const hours = Math.floor(avgMinutes / 60);
+        const minutes = avgMinutes % 60;
+        if (hours > 0) {
+            averageTime = `${hours}h${minutes.toString().padStart(2, '0')}min`;
+        }
+        else {
+            averageTime = `${minutes}min`;
+        }
+    }
+    return { averageTime, averagePace };
+}
 exports.default = router;

@@ -147,7 +147,7 @@ router.post('/register-athlete', async (req, res) => {
       return res.status(403).json({ error: 'Access denied. Coach profile required.' });
     }
 
-    const { email, name, phone, age } = req.body;
+    const { email, name, phone, age, level, status } = req.body;
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
@@ -177,7 +177,9 @@ router.post('/register-athlete', async (req, res) => {
     const athleteProfile = await prisma.athleteProfile.create({
       data: { 
         userId: user.id,
-        coachId: coachProfile.id
+        coachId: coachProfile.id,
+        level: level || 'BEGINNER',
+        status: status || 'ACTIVE'
       }
     });
 
