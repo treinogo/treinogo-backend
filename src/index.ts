@@ -10,6 +10,8 @@ import physicalTestRoutes from './routes/physical-tests';
 import raceRoutes from './routes/races';
 import dashboardRoutes from './routes/dashboard';
 import notificationRoutes from './routes/notifications';
+import feedbackRoutes from './routes/feedback';
+import integrationsRoutes from './routes/integrations';
 
 dotenv.config();
 
@@ -89,6 +91,8 @@ app.use('/api/physical-tests', physicalTestRoutes);
 app.use('/api/races', raceRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/feedback', feedbackRoutes);
+app.use('/api/integrations', integrationsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

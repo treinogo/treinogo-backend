@@ -10,39 +10,86 @@ interface AuthRequest extends express.Request {
   userRole?: string;
 }
 
-// GET /api/challenges - List challenges for coach
-router.get('/', authenticate, authorizeRole(['COACH']), async (req: AuthRequest, res) => {
+// GET /api/challenges - List challenges (for coach or athlete)
+router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
     const userId = req.userId;
 
+    // Check if user is a coach
     const coach = await prisma.coachProfile.findUnique({
       where: { userId }
     });
 
-    if (!coach) {
-      return res.status(403).json({ error: 'Access denied. Coach profile required.' });
-    }
-
-    const challenges = await prisma.challenge.findMany({
-      where: { createdById: coach.id },
-      include: {
-        participants: {
-          include: {
-            athlete: {
-              include: {
-                user: {
-                  select: { id: true, name: true, avatar: true }
+    if (coach) {
+      // Return challenges created by this coach
+      const challenges = await prisma.challenge.findMany({
+        where: { createdById: coach.id },
+        include: {
+          participants: {
+            include: {
+              athlete: {
+                include: {
+                  user: {
+                    select: { id: true, name: true, avatar: true }
+                  }
                 }
               }
             }
+          },
+          _count: {
+            select: { participants: true }
           }
         },
-        _count: {
-          select: { participants: true }
+        orderBy: { createdAt: 'desc' }
+      });
+
+      return res.json({ challenges });
+    }
+
+    // Otherwise, user is an athlete - return their challenges
+    const athlete = await prisma.athleteProfile.findUnique({
+      where: { userId }
+    });
+
+    if (!athlete) {
+      return res.status(403).json({ error: 'No profile found' });
+    }
+
+    const participations = await prisma.challengeParticipant.findMany({
+      where: { athleteId: athlete.id },
+      include: {
+        challenge: {
+          include: {
+            createdBy: {
+              include: {
+                user: {
+                  select: { name: true }
+                }
+              }
+            },
+            participants: {
+              include: {
+                athlete: {
+                  include: {
+                    user: {
+                      select: { id: true, name: true, avatar: true }
+                    }
+                  }
+                }
+              },
+              orderBy: { points: 'desc' }
+            }
+          }
         }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { joinedAt: 'desc' }
     });
+
+    const challenges = participations.map(p => ({
+      ...p.challenge,
+      myProgress: p.progress,
+      myPoints: p.points
+    }));
 
     res.json({ challenges });
   } catch (error) {

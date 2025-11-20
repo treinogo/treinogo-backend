@@ -500,4 +500,33 @@ router.get('/recent-activities', authenticate, authorizeRole(['COACH']), async (
   }
 });
 
+// GET /api/dashboard/tips - Get daily training tips
+router.get('/tips', authenticate, authorizeRole(['COACH']), async (req: AuthRequest, res) => {
+  try {
+    const tips = [
+      'Lembre-se: equilíbrio é a chave do progresso!',
+      'Varie os treinos intervalados para melhorar o desempenho.',
+      'O descanso é tão importante quanto o treino.',
+      'Progressão gradual evita lesões e melhora resultados.',
+      'Acompanhe a evolução dos seus alunos semanalmente.',
+      'Hidratação adequada faz toda a diferença no desempenho.',
+      'Treinos de força complementam o trabalho de resistência.',
+      'Estabeleça metas claras e mensuráveis com seus atletas.',
+      'A alimentação pré-treino impacta diretamente no rendimento.',
+      'Ouça o feedback dos seus alunos para ajustar os planos.',
+      'Técnica de corrida é fundamental para evitar lesões.',
+      'Varie os percursos para manter a motivação alta.',
+      'O aquecimento adequado prepara o corpo para o esforço.',
+      'Periodização do treino gera melhores resultados a longo prazo.',
+      'Recuperação ativa acelera a adaptação muscular.'
+    ];
+
+    const randomTip = tips[Math.floor(Math.random() * tips.length)];
+    res.json({ tip: randomTip });
+  } catch (error) {
+    console.error('Get tips error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

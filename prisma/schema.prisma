@@ -23,6 +23,9 @@ model User {
   athleteProfile AthleteProfile?
   coachProfile   CoachProfile?
   notifications  Notification[]
+  preferences    UserPreferences?
+  integrations   UserIntegration[]
+  feedbacks      Feedback[]
 
   @@map("users")
 }
@@ -272,10 +275,65 @@ model Notification {
   @@map("notifications")
 }
 
+model Feedback {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating      Int
+  categoria   String
+  mensagem    String
+  createdAt   DateTime @default(now())
+
+  @@map("feedbacks")
+}
+
+model UserPreferences {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Email notifications
+  emailNotifications  Boolean  @default(true)
+  emailReports        Boolean  @default(true)
+  emailChallenges     Boolean  @default(false)
+
+  // Push notifications
+  pushNotifications   Boolean  @default(true)
+  pushNewAthletes     Boolean  @default(true)
+  pushTrainings       Boolean  @default(false)
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("user_preferences")
+}
+
+model UserIntegration {
+  id              String              @id @default(cuid())
+  userId          String
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform        IntegrationPlatform
+  isConnected     Boolean             @default(false)
+  accessToken     String?
+  refreshToken    String?
+  lastSync        DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@unique([userId, platform])
+  @@map("user_integrations")
+}
+
 enum ChallengeStatus {
   ACTIVE
   COMPLETED
   CANCELLED
+}
+
+enum IntegrationPlatform {
+  STRAVA
+  POLAR
+  GARMIN
 }
 
 enum PhysicalTestType {

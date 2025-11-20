@@ -50,21 +50,107 @@ router.get('/me', authenticate, async (req: any, res) => {
 // Update user profile
 router.put('/me', authenticate, async (req: any, res) => {
   try {
-    const { name, phone, age, avatar } = req.body;
+    const {
+      name,
+      email,
+      telefone,
+      dataNascimento,
+      cpf,
+      profissao,
+      cep,
+      logradouro,
+      numero,
+      complemento,
+      bairro,
+      cidade,
+      estado,
+      biografia,
+      especializacao,
+      cref,
+      site,
+      phone,
+      age,
+      avatar
+    } = req.body;
+
+    // Build update object with provided fields
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (email !== undefined) updateData.email = email;
+    if (telefone !== undefined || phone !== undefined) updateData.phone = telefone || phone;
+    if (dataNascimento !== undefined) updateData.birthDate = dataNascimento ? new Date(dataNascimento) : null;
+    if (age !== undefined) updateData.age = age;
+    if (avatar !== undefined) updateData.avatar = avatar;
 
     const user = await prisma.user.update({
       where: { id: req.userId },
-      data: {
-        name,
-        phone,
-        age,
-        avatar
-      }
+      data: updateData
     });
 
     res.json({ message: 'Profile updated successfully', user });
   } catch (error) {
     console.error('Update profile error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Upload avatar
+router.post('/me/avatar', authenticate, async (req: any, res) => {
+  try {
+    const { avatar } = req.body;
+
+    if (!avatar) {
+      return res.status(400).json({ error: 'Avatar URL is required' });
+    }
+
+    const user = await prisma.user.update({
+      where: { id: req.userId },
+      data: { avatar }
+    });
+
+    res.json({ success: true, url: user.avatar });
+  } catch (error) {
+    console.error('Update avatar error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Change password
+router.post('/me/change-password', authenticate, async (req: any, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current password and new password are required' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Verify current password
+    const bcrypt = require('bcryptjs');
+    const isValid = await bcrypt.compare(currentPassword, user.password);
+
+    if (!isValid) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: req.userId },
+      data: { password: hashedPassword }
+    });
+
+    res.json({ success: true, message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -438,7 +524,7 @@ router.get('/:athleteId/plan-history', authenticate, async (req: any, res) => {
 router.delete('/:id', authenticate, async (req: any, res) => {
   try {
     const { id } = req.params;
-    
+
     // Verify that the user to be deleted is an athlete of this coach
     const userToDelete = await prisma.user.findUnique({
       where: { id },
@@ -468,6 +554,126 @@ router.delete('/:id', authenticate, async (req: any, res) => {
     res.json({ message: 'Athlete deleted successfully' });
   } catch (error) {
     console.error('Delete user error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get user preferences
+router.get('/me/preferences', authenticate, async (req: any, res) => {
+  try {
+    let preferences = await prisma.userPreferences.findUnique({
+      where: { userId: req.userId }
+    });
+
+    // Create default preferences if not exists
+    if (!preferences) {
+      preferences = await prisma.userPreferences.create({
+        data: { userId: req.userId }
+      });
+    }
+
+    res.json({ preferences });
+  } catch (error) {
+    console.error('Get preferences error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update user preferences
+router.put('/me/preferences', authenticate, async (req: any, res) => {
+  try {
+    const {
+      emailNotifications,
+      emailReports,
+      emailChallenges,
+      pushNotifications,
+      pushNewAthletes,
+      pushTrainings
+    } = req.body;
+
+    const updateData: any = {};
+    if (emailNotifications !== undefined) updateData.emailNotifications = emailNotifications;
+    if (emailReports !== undefined) updateData.emailReports = emailReports;
+    if (emailChallenges !== undefined) updateData.emailChallenges = emailChallenges;
+    if (pushNotifications !== undefined) updateData.pushNotifications = pushNotifications;
+    if (pushNewAthletes !== undefined) updateData.pushNewAthletes = pushNewAthletes;
+    if (pushTrainings !== undefined) updateData.pushTrainings = pushTrainings;
+
+    const preferences = await prisma.userPreferences.upsert({
+      where: { userId: req.userId },
+      update: updateData,
+      create: {
+        userId: req.userId,
+        ...updateData
+      }
+    });
+
+    res.json({ message: 'Preferences updated successfully', preferences });
+  } catch (error) {
+    console.error('Update preferences error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get user integrations
+router.get('/me/integrations', authenticate, async (req: any, res) => {
+  try {
+    const integrations = await prisma.userIntegration.findMany({
+      where: { userId: req.userId },
+      select: {
+        id: true,
+        platform: true,
+        isConnected: true,
+        lastSync: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    res.json({ integrations });
+  } catch (error) {
+    console.error('Get integrations error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Toggle integration connection
+router.post('/me/integrations/:platform', authenticate, async (req: any, res) => {
+  try {
+    const { platform } = req.params;
+    const { connect } = req.body;
+
+    // Validate platform
+    const validPlatforms = ['STRAVA', 'POLAR', 'GARMIN'];
+    if (!validPlatforms.includes(platform.toUpperCase())) {
+      return res.status(400).json({ error: 'Invalid platform' });
+    }
+
+    const integration = await prisma.userIntegration.upsert({
+      where: {
+        userId_platform: {
+          userId: req.userId,
+          platform: platform.toUpperCase()
+        }
+      },
+      update: {
+        isConnected: connect,
+        lastSync: connect ? new Date() : null
+      },
+      create: {
+        userId: req.userId,
+        platform: platform.toUpperCase(),
+        isConnected: connect,
+        lastSync: connect ? new Date() : null
+      }
+    });
+
+    res.json({
+      message: `${platform} ${connect ? 'connected' : 'disconnected'} successfully`,
+      integration
+    });
+  } catch (error) {
+    console.error('Toggle integration error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
