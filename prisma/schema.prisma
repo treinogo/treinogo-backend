@@ -8,124 +8,261 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  name      String
-  phone     String?
-  age       Int?
-  avatar    String?
-  role      Role     @default(ATHLETE)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
+  id             String            @id @default(cuid())
+  email          String            @unique
+  password       String
+  name           String
+  phone          String?
+  age            Int?
+  avatar         String?
+  role           Role              @default(ATHLETE)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
   athleteProfile AthleteProfile?
   coachProfile   CoachProfile?
-  notifications  Notification[]
-  preferences    UserPreferences?
-  integrations   UserIntegration[]
   feedbacks      Feedback[]
+  notifications  Notification[]
+  integrations   UserIntegration[]
+  preferences    UserPreferences?
 
   @@map("users")
 }
 
 model AthleteProfile {
-  id               String            @id @default(cuid())
-  userId           String            @unique
-  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  level            Level             @default(BEGINNER)
-  status           AthleteStatus     @default(ACTIVE)
-  currentPlanId    String?
-  currentPlan      TrainingPlan?     @relation(fields: [currentPlanId], references: [id])
-  currentProgress  Int               @default(0)
-  completedTrainings Int             @default(0)
-  averageTime      String?
-  averagePace      String?
-
-  // Relations
-  trainings        Training[]
-  activities       Activity[]
-  coachId          String?
-  coach            CoachProfile?     @relation(fields: [coachId], references: [id])
+  id                      String                 @id @default(cuid())
+  userId                  String                 @unique
+  level                   Level                  @default(BEGINNER)
+  status                  AthleteStatus          @default(ACTIVE)
+  currentPlanId           String?
+  currentProgress         Int                    @default(0)
+  completedTrainings      Int                    @default(0)
+  averageTime             String?
+  averagePace             String?
+  coachId                 String?
+  activities              Activity[]
+  coach                   CoachProfile?          @relation(fields: [coachId], references: [id])
+  currentPlan             TrainingPlan?          @relation(fields: [currentPlanId], references: [id])
+  user                    User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   challengeParticipations ChallengeParticipant[]
-  physicalTests    PhysicalTest[]
+  physicalTests           PhysicalTest[]
+  trainings               Training[]
 
   @@map("athlete_profiles")
 }
 
 model CoachProfile {
-  id          String   @id @default(cuid())
-  userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  // Relations
-  athletes    AthleteProfile[]
+  id            String           @id @default(cuid())
+  userId        String           @unique
+  athletes      AthleteProfile[]
+  challenges    Challenge[]
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  races         Race[]
   trainingPlans TrainingPlan[]
-  challenges  Challenge[]
-  races       Race[]
 
   @@map("coach_profiles")
 }
 
 model TrainingPlan {
-  id            String         @id @default(cuid())
-  name          String
-  category      PlanCategory
-  duration      Int            // weeks
-  daysPerWeek   Int
-  status        PlanStatus     @default(ACTIVE)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-
-  // Relations
-  createdById   String
-  createdBy     CoachProfile   @relation(fields: [createdById], references: [id])
-  athletes      AthleteProfile[]
-  trainings     Training[]
+  id                String              @id @default(cuid())
+  name              String
+  category          PlanCategory
+  duration          Int
+  daysPerWeek       Int
+  status            PlanStatus          @default(ACTIVE)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  createdById       String
+  athletes          AthleteProfile[]
+  createdBy         CoachProfile        @relation(fields: [createdById], references: [id])
+  trainings         Training[]
   weeklyProgramming WeeklyProgramming[]
 
   @@map("training_plans")
 }
 
 model Training {
-  id          String        @id @default(cuid())
-  date        DateTime
-  type        TrainingType
-  distance    String
-  duration    String
-  pace        String
-  notes       String?
-  status      TrainingStatus @default(PENDING)
-  weekNumber  Int?
-  
-  // Relations
-  athleteId   String
-  athlete     AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Cascade)
-  planId      String?
-  plan        TrainingPlan?  @relation(fields: [planId], references: [id])
-  
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id         String         @id @default(cuid())
+  date       DateTime
+  type       TrainingType
+  distance   String
+  duration   String
+  pace       String
+  notes      String?
+  status     TrainingStatus @default(PENDING)
+  weekNumber Int?
+  athleteId  String
+  planId     String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  athlete    AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  plan       TrainingPlan?  @relation(fields: [planId], references: [id])
 
   @@map("trainings")
 }
 
 model Activity {
-  id          String   @id @default(cuid())
-  type        String
-  distance    String
-  time        String
-  pace        String?
-  notes       String?
-  
-  // Relations
-  athleteId   String
-  athlete     AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Cascade)
-  
-  createdAt   DateTime @default(now())
+  id        String         @id @default(cuid())
+  type      String
+  distance  String
+  time      String
+  pace      String?
+  notes     String?
+  athleteId String
+  createdAt DateTime       @default(now())
+  athlete   AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Cascade)
 
   @@map("activities")
+}
+
+model Challenge {
+  id           String                 @id @default(cuid())
+  name         String
+  objective    String
+  duration     Int
+  startDate    DateTime
+  endDate      DateTime
+  reward       String?
+  status       ChallengeStatus        @default(ACTIVE)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  createdById  String
+  participants ChallengeParticipant[]
+  createdBy    CoachProfile           @relation(fields: [createdById], references: [id])
+
+  @@map("challenges")
+}
+
+model ChallengeParticipant {
+  id          String         @id @default(cuid())
+  challengeId String
+  athleteId   String
+  progress    Int            @default(0)
+  points      Int            @default(0)
+  joinedAt    DateTime       @default(now())
+  athlete     AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  challenge   Challenge      @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@unique([challengeId, athleteId])
+  @@map("challenge_participants")
+}
+
+model PhysicalTest {
+  id        String           @id @default(cuid())
+  athleteId String
+  testType  PhysicalTestType
+  pace      String
+  finalTime String
+  distance  Float?
+  testDate  DateTime
+  createdAt DateTime         @default(now())
+  athlete   AthleteProfile   @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+
+  @@map("physical_tests")
+}
+
+model Race {
+  id          String       @id @default(cuid())
+  name        String
+  distances   String[]
+  city        String
+  state       String
+  raceDate    DateTime
+  timeOfDay   TimeOfDay?
+  link        String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  createdById String
+  createdBy   CoachProfile @relation(fields: [createdById], references: [id])
+
+  @@map("races")
+}
+
+model WeeklyProgramming {
+  id        String       @id @default(cuid())
+  planId    String
+  week      Int
+  monday    String?
+  tuesday   String?
+  wednesday String?
+  thursday  String?
+  friday    String?
+  saturday  String?
+  sunday    String?
+  plan      TrainingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, week])
+  @@map("weekly_programming")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  title     String
+  message   String
+  type      NotificationType @default(INFO)
+  isRead    Boolean          @default(false)
+  userId    String
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model Feedback {
+  id        String   @id @default(cuid())
+  userId    String
+  rating    Int
+  categoria String
+  mensagem  String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("feedbacks")
+}
+
+model UserPreferences {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  emailNotifications Boolean  @default(true)
+  emailReports       Boolean  @default(true)
+  emailChallenges    Boolean  @default(false)
+  pushNotifications  Boolean  @default(true)
+  pushNewAthletes    Boolean  @default(true)
+  pushTrainings      Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model UserIntegration {
+  id           String              @id @default(cuid())
+  userId       String
+  platform     IntegrationPlatform
+  isConnected  Boolean             @default(false)
+  accessToken  String?
+  refreshToken String?
+  lastSync     DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, platform])
+  @@map("user_integrations")
+}
+
+model ContactMessage {
+  id        String        @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  subject   String
+  message   String
+  status    ContactStatus @default(PENDING)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@map("contact_messages")
 }
 
 enum Role {
@@ -178,152 +315,6 @@ enum TrainingStatus {
   MISSED
 }
 
-model Challenge {
-  id           String            @id @default(cuid())
-  name         String
-  objective    String
-  duration     Int               // em dias
-  startDate    DateTime
-  endDate      DateTime
-  reward       String?
-  status       ChallengeStatus   @default(ACTIVE)
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-
-  // Relations
-  createdById  String
-  createdBy    CoachProfile      @relation(fields: [createdById], references: [id])
-  participants ChallengeParticipant[]
-
-  @@map("challenges")
-}
-
-model ChallengeParticipant {
-  id          String     @id @default(cuid())
-  challengeId String
-  challenge   Challenge  @relation(fields: [challengeId], references: [id], onDelete: Cascade)
-  athleteId   String
-  athlete     AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Cascade)
-  progress    Int        @default(0)
-  points      Int        @default(0)
-  joinedAt    DateTime   @default(now())
-
-  @@unique([challengeId, athleteId])
-  @@map("challenge_participants")
-}
-
-model PhysicalTest {
-  id          String           @id @default(cuid())
-  athleteId   String
-  athlete     AthleteProfile   @relation(fields: [athleteId], references: [id], onDelete: Cascade)
-  testType    PhysicalTestType
-  pace        String           // formato: mm:ss
-  finalTime   String
-  distance    Float?           // para teste de 12 minutos
-  testDate    DateTime
-  createdAt   DateTime         @default(now())
-
-  @@map("physical_tests")
-}
-
-model Race {
-  id         String     @id @default(cuid())
-  name       String
-  distances  String[]   // ['3km', '5km', '10km', etc]
-  city       String
-  state      String
-  raceDate   DateTime
-  timeOfDay  TimeOfDay?
-  link       String?
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
-
-  // Relations
-  createdById String
-  createdBy   CoachProfile @relation(fields: [createdById], references: [id])
-
-  @@map("races")
-}
-
-model WeeklyProgramming {
-  id            String        @id @default(cuid())
-  planId        String
-  plan          TrainingPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
-  week          Int
-  monday        String?       // JSON string com detalhes do treino
-  tuesday       String?
-  wednesday     String?
-  thursday      String?
-  friday        String?
-  saturday      String?
-  sunday        String?
-
-  @@unique([planId, week])
-  @@map("weekly_programming")
-}
-
-model Notification {
-  id          String            @id @default(cuid())
-  title       String
-  message     String
-  type        NotificationType  @default(INFO)
-  isRead      Boolean           @default(false)
-  userId      String
-  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt   DateTime          @default(now())
-
-  @@map("notifications")
-}
-
-model Feedback {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  rating      Int
-  categoria   String
-  mensagem    String
-  createdAt   DateTime @default(now())
-
-  @@map("feedbacks")
-}
-
-model UserPreferences {
-  id                  String   @id @default(cuid())
-  userId              String   @unique
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Email notifications
-  emailNotifications  Boolean  @default(true)
-  emailReports        Boolean  @default(true)
-  emailChallenges     Boolean  @default(false)
-
-  // Push notifications
-  pushNotifications   Boolean  @default(true)
-  pushNewAthletes     Boolean  @default(true)
-  pushTrainings       Boolean  @default(false)
-
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  @@map("user_preferences")
-}
-
-model UserIntegration {
-  id              String              @id @default(cuid())
-  userId          String
-  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  platform        IntegrationPlatform
-  isConnected     Boolean             @default(false)
-  accessToken     String?
-  refreshToken    String?
-  lastSync        DateTime?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-
-  @@unique([userId, platform])
-  @@map("user_integrations")
-}
-
 enum ChallengeStatus {
   ACTIVE
   COMPLETED
@@ -353,20 +344,6 @@ enum NotificationType {
   SUCCESS
   WARNING
   ERROR
-}
-
-model ContactMessage {
-  id        String   @id @default(cuid())
-  name      String
-  email     String
-  phone     String?
-  subject   String
-  message   String
-  status    ContactStatus @default(PENDING)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("contact_messages")
 }
 
 enum ContactStatus {
