@@ -16,6 +16,20 @@ model User {
   age            Int?
   avatar         String?
   role           Role              @default(ATHLETE)
+  birthDate      DateTime?
+  cpf            String?
+  profession     String?
+  cep            String?
+  street         String?
+  number         String?
+  complement     String?
+  neighborhood   String?
+  city           String?
+  state          String?
+  biography      String?
+  specialization String?
+  cref           String?
+  website        String?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
   athleteProfile AthleteProfile?

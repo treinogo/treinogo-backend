@@ -1,0 +1,15 @@
+-- AlterTable
+ALTER TABLE "users" ADD COLUMN     "biography" TEXT,
+ADD COLUMN     "birthDate" TIMESTAMP(3),
+ADD COLUMN     "cep" TEXT,
+ADD COLUMN     "city" TEXT,
+ADD COLUMN     "complement" TEXT,
+ADD COLUMN     "cpf" TEXT,
+ADD COLUMN     "cref" TEXT,
+ADD COLUMN     "neighborhood" TEXT,
+ADD COLUMN     "number" TEXT,
+ADD COLUMN     "profession" TEXT,
+ADD COLUMN     "specialization" TEXT,
+ADD COLUMN     "state" TEXT,
+ADD COLUMN     "street" TEXT,
+ADD COLUMN     "website" TEXT;

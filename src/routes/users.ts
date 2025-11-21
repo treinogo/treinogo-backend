@@ -81,6 +81,19 @@ router.put('/me', authenticate, async (req: any, res) => {
     if (dataNascimento !== undefined) updateData.birthDate = dataNascimento ? new Date(dataNascimento) : null;
     if (age !== undefined) updateData.age = age;
     if (avatar !== undefined) updateData.avatar = avatar;
+    if (cpf !== undefined) updateData.cpf = cpf;
+    if (profissao !== undefined) updateData.profession = profissao;
+    if (cep !== undefined) updateData.cep = cep;
+    if (logradouro !== undefined) updateData.street = logradouro;
+    if (numero !== undefined) updateData.number = numero;
+    if (complemento !== undefined) updateData.complement = complemento;
+    if (bairro !== undefined) updateData.neighborhood = bairro;
+    if (cidade !== undefined) updateData.city = cidade;
+    if (estado !== undefined) updateData.state = estado;
+    if (biografia !== undefined) updateData.biography = biografia;
+    if (especializacao !== undefined) updateData.specialization = especializacao;
+    if (cref !== undefined) updateData.cref = cref;
+    if (site !== undefined) updateData.website = site;
 
     const user = await prisma.user.update({
       where: { id: req.userId },
