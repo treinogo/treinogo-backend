@@ -508,6 +508,96 @@ router.get('/coach/my-plans', authenticate, authorizeRole(['COACH']), async (req
   }
 });
 
+// Clone a training plan
+router.post('/:id/clone', authenticate, authorizeRole(['COACH', 'ADMIN']), async (req: any, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get the original plan with all its data
+    const originalPlan = await prisma.trainingPlan.findUnique({
+      where: { id },
+      include: {
+        weeklyProgramming: {
+          orderBy: { week: 'asc' }
+        }
+      }
+    });
+
+    if (!originalPlan) {
+      return res.status(404).json({ error: 'Plan not found' });
+    }
+
+    // Get coach profile
+    const coachProfile = await prisma.coachProfile.findUnique({
+      where: { userId: req.userId }
+    });
+
+    if (!coachProfile) {
+      return res.status(404).json({ error: 'Coach profile not found' });
+    }
+
+    // Create the cloned plan with a new name
+    const clonedPlan = await prisma.trainingPlan.create({
+      data: {
+        name: `${originalPlan.name} - Cópia`,
+        category: originalPlan.category,
+        duration: originalPlan.duration,
+        daysPerWeek: originalPlan.daysPerWeek,
+        status: 'DRAFT', // Start as draft
+        createdById: coachProfile.id
+      }
+    });
+
+    // Clone all weekly programming
+    if (originalPlan.weeklyProgramming.length > 0) {
+      const weeklyProgrammingData = originalPlan.weeklyProgramming.map(wp => ({
+        planId: clonedPlan.id,
+        week: wp.week,
+        monday: wp.monday,
+        tuesday: wp.tuesday,
+        wednesday: wp.wednesday,
+        thursday: wp.thursday,
+        friday: wp.friday,
+        saturday: wp.saturday,
+        sunday: wp.sunday
+      }));
+
+      await prisma.weeklyProgramming.createMany({
+        data: weeklyProgrammingData
+      });
+    }
+
+    // Fetch the complete cloned plan to return
+    const completePlan = await prisma.trainingPlan.findUnique({
+      where: { id: clonedPlan.id },
+      include: {
+        createdBy: {
+          include: {
+            user: {
+              select: { name: true }
+            }
+          }
+        },
+        _count: {
+          select: {
+            athletes: true,
+            trainings: true,
+            weeklyProgramming: true
+          }
+        }
+      }
+    });
+
+    res.status(201).json({
+      message: 'Plan cloned successfully',
+      plan: completePlan
+    });
+  } catch (error) {
+    console.error('Clone plan error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get plan progress with athletes statistics
 router.get('/:id/progress', authenticate, async (req: any, res) => {
   try {
