@@ -14,6 +14,7 @@ import feedbackRoutes from './routes/feedback';
 import integrationsRoutes from './routes/integrations';
 import contactRoutes from './routes/contact';
 import referralRoutes from './routes/referrals';
+import subscriptionRoutes from './routes/subscriptions';
 
 dotenv.config();
 
@@ -97,6 +98,7 @@ app.use('/api/feedback', feedbackRoutes);
 app.use('/api/integrations', integrationsRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/referrals', referralRoutes);
+app.use('/api/subscriptions', subscriptionRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

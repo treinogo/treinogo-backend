@@ -75,8 +75,24 @@ model CoachProfile {
   races         Race[]
   trainingPlans TrainingPlan[]
   referrals     Referral[]
+  subscription  Subscription?
 
   @@map("coach_profiles")
+}
+
+model Subscription {
+  id           String             @id @default(cuid())
+  coachId      String             @unique
+  planType     SubscriptionPlan   @default(FREE)
+  status       SubscriptionStatus @default(ACTIVE)
+  startDate    DateTime           @default(now())
+  renewalDate  DateTime?
+  cancelledAt  DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  coach        CoachProfile       @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
 }
 
 model Referral {
@@ -402,4 +418,18 @@ enum ReferralStatus {
   SENT
   REGISTERED
   REWARDED
+}
+
+enum SubscriptionPlan {
+  FREE
+  STARTER
+  PRO
+  BUSINESS
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
 }
