@@ -68,13 +68,28 @@ model AthleteProfile {
 model CoachProfile {
   id            String           @id @default(cuid())
   userId        String           @unique
+  referralCode  String?          @unique
   athletes      AthleteProfile[]
   challenges    Challenge[]
   user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   races         Race[]
   trainingPlans TrainingPlan[]
+  referrals     Referral[]
 
   @@map("coach_profiles")
+}
+
+model Referral {
+  id            String        @id @default(cuid())
+  coachId       String
+  email         String
+  status        ReferralStatus @default(SENT)
+  discount      Int           @default(0)
+  sentAt        DateTime      @default(now())
+  registeredAt  DateTime?
+  coach         CoachProfile  @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@map("referrals")
 }
 
 model TrainingPlan {
@@ -381,4 +396,10 @@ enum ContactStatus {
   IN_PROGRESS
   RESOLVED
   CLOSED
+}
+
+enum ReferralStatus {
+  SENT
+  REGISTERED
+  REWARDED
 }

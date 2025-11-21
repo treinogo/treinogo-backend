@@ -13,6 +13,7 @@ import notificationRoutes from './routes/notifications';
 import feedbackRoutes from './routes/feedback';
 import integrationsRoutes from './routes/integrations';
 import contactRoutes from './routes/contact';
+import referralRoutes from './routes/referrals';
 
 dotenv.config();
 
@@ -95,6 +96,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/integrations', integrationsRoutes);
 app.use('/api/contact', contactRoutes);
+app.use('/api/referrals', referralRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
