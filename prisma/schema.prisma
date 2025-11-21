@@ -46,6 +46,7 @@ model AthleteProfile {
   challengeParticipations ChallengeParticipant[]
   physicalTests           PhysicalTest[]
   trainings               Training[]
+  raceRegistrations       RaceRegistration[]
 
   @@map("athlete_profiles")
 }
@@ -161,7 +162,7 @@ model PhysicalTest {
 }
 
 model Race {
-  id          String       @id @default(cuid())
+  id          String            @id @default(cuid())
   name        String
   distances   String[]
   city        String
@@ -169,12 +170,27 @@ model Race {
   raceDate    DateTime
   timeOfDay   TimeOfDay?
   link        String?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
   createdById String
-  createdBy   CoachProfile @relation(fields: [createdById], references: [id])
+  createdBy   CoachProfile      @relation(fields: [createdById], references: [id])
+  registrations RaceRegistration[]
 
   @@map("races")
+}
+
+model RaceRegistration {
+  id          String         @id @default(cuid())
+  raceId      String
+  athleteId   String
+  distance    String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  race        Race           @relation(fields: [raceId], references: [id], onDelete: Cascade)
+  athlete     AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+
+  @@unique([raceId, athleteId, distance])
+  @@map("race_registrations")
 }
 
 model WeeklyProgramming {
