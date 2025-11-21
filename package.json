@@ -32,6 +32,7 @@
   "homepage": "https://github.com/treinogo/treinogo-backend#readme",
   "dependencies": {
     "@prisma/client": "^6.19.0",
+    "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
