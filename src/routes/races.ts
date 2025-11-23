@@ -554,9 +554,9 @@ router.delete('/:id/registrations/:registrationId', authenticate, authorizeRole(
     }
 
     const race = await prisma.race.findFirst({
-      where: { 
+      where: {
         id,
-        createdById: coach.id 
+        createdById: coach.id
       }
     });
 
@@ -593,6 +593,155 @@ router.delete('/:id/registrations/:registrationId', authenticate, authorizeRole(
     res.json({ message: 'Registration removed successfully' });
   } catch (error) {
     console.error('Delete race registration error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ============================================
+// ATHLETE ENDPOINTS
+// ============================================
+
+// GET /api/races/athlete/all - List all races for athlete
+router.get('/athlete/all', authenticate, authorizeRole(['ATHLETE']), async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId;
+
+    const athlete = await prisma.athleteProfile.findUnique({
+      where: { userId }
+    });
+
+    if (!athlete) {
+      return res.status(403).json({ error: 'Access denied. Athlete profile required.' });
+    }
+
+    // Get all races created by athlete's coach
+    const races = await prisma.race.findMany({
+      where: {
+        createdById: athlete.coachId || undefined
+      },
+      include: {
+        registrations: {
+          where: {
+            athleteId: athlete.id
+          },
+          select: {
+            id: true,
+            distance: true,
+            createdAt: true
+          }
+        }
+      },
+      orderBy: { raceDate: 'asc' }
+    });
+
+    res.json({ races });
+  } catch (error) {
+    console.error('List races for athlete error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/races/:id/athlete/register - Athlete self-register for race
+router.post('/:id/athlete/register', authenticate, authorizeRole(['ATHLETE']), async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId;
+    const { id } = req.params;
+    const { distance } = req.body;
+
+    if (!distance) {
+      return res.status(400).json({ error: 'distance is required' });
+    }
+
+    const athlete = await prisma.athleteProfile.findUnique({
+      where: { userId }
+    });
+
+    if (!athlete) {
+      return res.status(403).json({ error: 'Access denied. Athlete profile required.' });
+    }
+
+    const race = await prisma.race.findUnique({
+      where: { id }
+    });
+
+    if (!race) {
+      return res.status(404).json({ error: 'Race not found' });
+    }
+
+    if (!race.distances.includes(distance)) {
+      return res.status(400).json({ error: 'Distance not available for this race' });
+    }
+
+    // Check if already registered for this distance
+    const existing = await prisma.raceRegistration.findUnique({
+      where: {
+        raceId_athleteId_distance: {
+          raceId: id,
+          athleteId: athlete.id,
+          distance
+        }
+      }
+    });
+
+    if (existing) {
+      return res.status(400).json({ error: 'Already registered for this distance' });
+    }
+
+    const registration = await prisma.raceRegistration.create({
+      data: {
+        raceId: id,
+        athleteId: athlete.id,
+        distance
+      }
+    });
+
+    res.status(201).json({ registration });
+  } catch (error) {
+    console.error('Athlete register for race error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/races/:id/athlete/unregister - Athlete self-unregister from race
+router.delete('/:id/athlete/unregister', authenticate, authorizeRole(['ATHLETE']), async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId;
+    const { id } = req.params;
+    const { distance } = req.body;
+
+    if (!distance) {
+      return res.status(400).json({ error: 'distance is required' });
+    }
+
+    const athlete = await prisma.athleteProfile.findUnique({
+      where: { userId }
+    });
+
+    if (!athlete) {
+      return res.status(403).json({ error: 'Access denied. Athlete profile required.' });
+    }
+
+    const registration = await prisma.raceRegistration.findUnique({
+      where: {
+        raceId_athleteId_distance: {
+          raceId: id,
+          athleteId: athlete.id,
+          distance
+        }
+      }
+    });
+
+    if (!registration) {
+      return res.status(404).json({ error: 'Registration not found' });
+    }
+
+    await prisma.raceRegistration.delete({
+      where: { id: registration.id }
+    });
+
+    res.json({ message: 'Unregistered successfully' });
+  } catch (error) {
+    console.error('Athlete unregister from race error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
