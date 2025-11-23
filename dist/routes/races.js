@@ -297,4 +297,225 @@ router.get('/by-distance/:distance', auth_1.authenticate, (0, auth_1.authorizeRo
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+// GET /api/races/:id/registrations - Get race registrations
+router.get('/:id/registrations', auth_1.authenticate, (0, auth_1.authorizeRole)(['COACH']), async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { id } = req.params;
+        const coach = await prisma.coachProfile.findUnique({
+            where: { userId }
+        });
+        if (!coach) {
+            return res.status(403).json({ error: 'Access denied. Coach profile required.' });
+        }
+        const race = await prisma.race.findFirst({
+            where: {
+                id,
+                createdById: coach.id
+            }
+        });
+        if (!race) {
+            return res.status(404).json({ error: 'Race not found' });
+        }
+        const registrations = await prisma.raceRegistration.findMany({
+            where: { raceId: id },
+            include: {
+                athlete: {
+                    include: {
+                        user: {
+                            select: {
+                                id: true,
+                                name: true,
+                                email: true,
+                                avatar: true
+                            }
+                        }
+                    }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json({ registrations });
+    }
+    catch (error) {
+        console.error('Get race registrations error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// POST /api/races/:id/registrations - Register athletes to race
+router.post('/:id/registrations', auth_1.authenticate, (0, auth_1.authorizeRole)(['COACH']), async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { id } = req.params;
+        const { athleteIds, distance } = req.body;
+        if (!athleteIds || !Array.isArray(athleteIds) || athleteIds.length === 0) {
+            return res.status(400).json({ error: 'athleteIds array is required' });
+        }
+        if (!distance) {
+            return res.status(400).json({ error: 'distance is required' });
+        }
+        const coach = await prisma.coachProfile.findUnique({
+            where: { userId }
+        });
+        if (!coach) {
+            return res.status(403).json({ error: 'Access denied. Coach profile required.' });
+        }
+        const race = await prisma.race.findFirst({
+            where: {
+                id,
+                createdById: coach.id
+            }
+        });
+        if (!race) {
+            return res.status(404).json({ error: 'Race not found' });
+        }
+        if (!race.distances.includes(distance)) {
+            return res.status(400).json({ error: 'Distance not available for this race' });
+        }
+        // Verify athletes belong to coach
+        const athletes = await prisma.athleteProfile.findMany({
+            where: {
+                id: { in: athleteIds },
+                coachId: coach.id
+            },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true
+                    }
+                }
+            }
+        });
+        if (athletes.length !== athleteIds.length) {
+            return res.status(403).json({ error: 'Some athletes do not belong to this coach' });
+        }
+        // Create registrations (skip duplicates for same distance)
+        const registrations = [];
+        const skipped = [];
+        for (const athleteId of athleteIds) {
+            // Get all registrations for this athlete in this race (single query)
+            const allRegistrations = await prisma.raceRegistration.findMany({
+                where: {
+                    raceId: id,
+                    athleteId
+                }
+            });
+            console.log(`🔍 All registrations for athlete ${athleteId} in race ${id}:`, allRegistrations.map(r => ({ id: r.id, distance: r.distance, raceId: r.raceId, athleteId: r.athleteId })));
+            // Find exact match for this distance (manual check to be 100% sure)
+            const existing = allRegistrations.find(reg => reg.distance === distance);
+            console.log(`🔍 Checking athlete ${athleteId} for race ${id} distance "${distance}":`, existing ? `✅ ALREADY EXISTS (id: ${existing.id}, distance: "${existing.distance}")` : '❌ NOT FOUND');
+            if (existing) {
+                // Verify the distance matches exactly
+                if (existing.distance === distance) {
+                    // Already registered for this distance
+                    const athlete = athletes.find(a => a.id === athleteId);
+                    if (athlete && athlete.user) {
+                        skipped.push(athlete.user.name || 'Aluno');
+                    }
+                    continue;
+                }
+                else {
+                    console.error(`⚠️ DISTANCE MISMATCH: Existing distance "${existing.distance}" !== requested "${distance}"`);
+                    // Don't skip if distances don't match exactly
+                }
+            }
+            try {
+                const registration = await prisma.raceRegistration.create({
+                    data: {
+                        raceId: id,
+                        athleteId,
+                        distance
+                    },
+                    include: {
+                        athlete: {
+                            include: {
+                                user: {
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                        email: true,
+                                        avatar: true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                registrations.push(registration);
+            }
+            catch (error) {
+                // Skip if already registered (unique constraint)
+                if (error.code === 'P2002') {
+                    const athlete = athletes.find(a => a.id === athleteId);
+                    if (athlete && athlete.user) {
+                        skipped.push(athlete.user.name || 'Aluno');
+                    }
+                }
+                else {
+                    throw error;
+                }
+            }
+        }
+        // Return info about skipped registrations
+        res.status(201).json({
+            registrations,
+            skipped: skipped.length > 0 ? skipped : undefined
+        });
+    }
+    catch (error) {
+        console.error('Create race registration error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// DELETE /api/races/:id/registrations/:registrationId - Remove race registration
+router.delete('/:id/registrations/:registrationId', auth_1.authenticate, (0, auth_1.authorizeRole)(['COACH']), async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { id, registrationId } = req.params;
+        const coach = await prisma.coachProfile.findUnique({
+            where: { userId }
+        });
+        if (!coach) {
+            return res.status(403).json({ error: 'Access denied. Coach profile required.' });
+        }
+        const race = await prisma.race.findFirst({
+            where: {
+                id,
+                createdById: coach.id
+            }
+        });
+        if (!race) {
+            return res.status(404).json({ error: 'Race not found' });
+        }
+        const registration = await prisma.raceRegistration.findFirst({
+            where: {
+                id: registrationId,
+                raceId: id
+            },
+            include: {
+                athlete: {
+                    select: {
+                        coachId: true
+                    }
+                }
+            }
+        });
+        if (!registration) {
+            return res.status(404).json({ error: 'Registration not found' });
+        }
+        if (registration.athlete.coachId !== coach.id) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+        await prisma.raceRegistration.delete({
+            where: { id: registrationId }
+        });
+        res.json({ message: 'Registration removed successfully' });
+    }
+    catch (error) {
+        console.error('Delete race registration error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 exports.default = router;

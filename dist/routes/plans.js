@@ -169,6 +169,81 @@ router.get('/:id', auth_1.authenticate, async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+// Update plan
+router.put('/:id', auth_1.authenticate, (0, auth_1.authorizeRole)(['COACH', 'ADMIN']), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, category, duration, daysPerWeek } = req.body;
+        // Check if plan exists
+        const existingPlan = await prisma_1.prisma.trainingPlan.findUnique({
+            where: { id }
+        });
+        if (!existingPlan) {
+            return res.status(404).json({ error: 'Plan not found' });
+        }
+        // Check if coach owns this plan
+        const coachProfile = await prisma_1.prisma.coachProfile.findUnique({
+            where: { userId: req.userId }
+        });
+        if (!coachProfile || existingPlan.createdById !== coachProfile.id) {
+            return res.status(403).json({ error: 'Access denied. You can only modify your own plans.' });
+        }
+        // Update the plan
+        const updatedPlan = await prisma_1.prisma.trainingPlan.update({
+            where: { id },
+            data: {
+                name,
+                category,
+                duration,
+                daysPerWeek
+            }
+        });
+        res.json({
+            message: 'Plan updated successfully',
+            plan: updatedPlan
+        });
+    }
+    catch (error) {
+        console.error('Update plan error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Delete plan
+router.delete('/:id', auth_1.authenticate, (0, auth_1.authorizeRole)(['COACH', 'ADMIN']), async (req, res) => {
+    try {
+        const { id } = req.params;
+        // Check if plan exists
+        const existingPlan = await prisma_1.prisma.trainingPlan.findUnique({
+            where: { id }
+        });
+        if (!existingPlan) {
+            return res.status(404).json({ error: 'Plan not found' });
+        }
+        // Check if coach owns this plan
+        const coachProfile = await prisma_1.prisma.coachProfile.findUnique({
+            where: { userId: req.userId }
+        });
+        if (!coachProfile || existingPlan.createdById !== coachProfile.id) {
+            return res.status(403).json({ error: 'Access denied. You can only delete your own plans.' });
+        }
+        // Delete associated data first (cascade delete might handle this, but being explicit)
+        await prisma_1.prisma.weeklyProgramming.deleteMany({
+            where: { planId: id }
+        });
+        await prisma_1.prisma.training.deleteMany({
+            where: { planId: id }
+        });
+        // Delete the plan
+        await prisma_1.prisma.trainingPlan.delete({
+            where: { id }
+        });
+        res.json({ message: 'Plan deleted successfully' });
+    }
+    catch (error) {
+        console.error('Delete plan error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 // Assign plan to athlete
 router.post('/:id/assign', auth_1.authenticate, (0, auth_1.authorizeRole)(['COACH', 'ADMIN']), async (req, res) => {
     try {
@@ -260,24 +335,24 @@ router.put('/:id/weekly-programming/:week', auth_1.authenticate, (0, auth_1.auth
                 }
             },
             update: {
-                monday: monday ? JSON.stringify(monday) : null,
-                tuesday: tuesday ? JSON.stringify(tuesday) : null,
-                wednesday: wednesday ? JSON.stringify(wednesday) : null,
-                thursday: thursday ? JSON.stringify(thursday) : null,
-                friday: friday ? JSON.stringify(friday) : null,
-                saturday: saturday ? JSON.stringify(saturday) : null,
-                sunday: sunday ? JSON.stringify(sunday) : null
+                monday: monday || null,
+                tuesday: tuesday || null,
+                wednesday: wednesday || null,
+                thursday: thursday || null,
+                friday: friday || null,
+                saturday: saturday || null,
+                sunday: sunday || null
             },
             create: {
                 planId: id,
                 week: weekNumber,
-                monday: monday ? JSON.stringify(monday) : null,
-                tuesday: tuesday ? JSON.stringify(tuesday) : null,
-                wednesday: wednesday ? JSON.stringify(wednesday) : null,
-                thursday: thursday ? JSON.stringify(thursday) : null,
-                friday: friday ? JSON.stringify(friday) : null,
-                saturday: saturday ? JSON.stringify(saturday) : null,
-                sunday: sunday ? JSON.stringify(sunday) : null
+                monday: monday || null,
+                tuesday: tuesday || null,
+                wednesday: wednesday || null,
+                thursday: thursday || null,
+                friday: friday || null,
+                saturday: saturday || null,
+                sunday: sunday || null
             }
         });
         res.json({ message: 'Weekly programming updated successfully', weeklyProgramming });
@@ -369,6 +444,87 @@ router.get('/coach/my-plans', auth_1.authenticate, (0, auth_1.authorizeRole)(['C
     }
     catch (error) {
         console.error('Get coach plans error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Clone a training plan
+router.post('/:id/clone', auth_1.authenticate, (0, auth_1.authorizeRole)(['COACH', 'ADMIN']), async (req, res) => {
+    try {
+        const { id } = req.params;
+        // Get the original plan with all its data
+        const originalPlan = await prisma_1.prisma.trainingPlan.findUnique({
+            where: { id },
+            include: {
+                weeklyProgramming: {
+                    orderBy: { week: 'asc' }
+                }
+            }
+        });
+        if (!originalPlan) {
+            return res.status(404).json({ error: 'Plan not found' });
+        }
+        // Get coach profile
+        const coachProfile = await prisma_1.prisma.coachProfile.findUnique({
+            where: { userId: req.userId }
+        });
+        if (!coachProfile) {
+            return res.status(404).json({ error: 'Coach profile not found' });
+        }
+        // Create the cloned plan with a new name
+        const clonedPlan = await prisma_1.prisma.trainingPlan.create({
+            data: {
+                name: `${originalPlan.name} - Cópia`,
+                category: originalPlan.category,
+                duration: originalPlan.duration,
+                daysPerWeek: originalPlan.daysPerWeek,
+                status: 'DRAFT', // Start as draft
+                createdById: coachProfile.id
+            }
+        });
+        // Clone all weekly programming
+        if (originalPlan.weeklyProgramming.length > 0) {
+            const weeklyProgrammingData = originalPlan.weeklyProgramming.map(wp => ({
+                planId: clonedPlan.id,
+                week: wp.week,
+                monday: wp.monday,
+                tuesday: wp.tuesday,
+                wednesday: wp.wednesday,
+                thursday: wp.thursday,
+                friday: wp.friday,
+                saturday: wp.saturday,
+                sunday: wp.sunday
+            }));
+            await prisma_1.prisma.weeklyProgramming.createMany({
+                data: weeklyProgrammingData
+            });
+        }
+        // Fetch the complete cloned plan to return
+        const completePlan = await prisma_1.prisma.trainingPlan.findUnique({
+            where: { id: clonedPlan.id },
+            include: {
+                createdBy: {
+                    include: {
+                        user: {
+                            select: { name: true }
+                        }
+                    }
+                },
+                _count: {
+                    select: {
+                        athletes: true,
+                        trainings: true,
+                        weeklyProgramming: true
+                    }
+                }
+            }
+        });
+        res.status(201).json({
+            message: 'Plan cloned successfully',
+            plan: completePlan
+        });
+    }
+    catch (error) {
+        console.error('Clone plan error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

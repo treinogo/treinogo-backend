@@ -9,8 +9,14 @@ interface AuthRequest extends Request {
 
 export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
-    
+    // Try to get token from cookie first, then fall back to Authorization header
+    let token = req.cookies?.auth_token;
+
+    if (!token) {
+      // Fallback to Authorization header for backwards compatibility
+      token = req.header('Authorization')?.replace('Bearer ', '');
+    }
+
     if (!token) {
       return res.status(401).json({ error: 'Access denied. No token provided.' });
     }
@@ -18,7 +24,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
     req.userId = decoded.userId;
     req.userRole = decoded.role;
-    
+
     next();
   } catch (error) {
     res.status(400).json({ error: 'Invalid token.' });

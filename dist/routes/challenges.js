@@ -8,27 +8,117 @@ const client_1 = require("@prisma/client");
 const auth_1 = require("../middleware/auth");
 const router = express_1.default.Router();
 const prisma = new client_1.PrismaClient();
-// GET /api/challenges - List challenges for coach
-router.get('/', auth_1.authenticate, (0, auth_1.authorizeRole)(['COACH']), async (req, res) => {
+// GET /api/challenges - List challenges (for coach or athlete)
+router.get('/', auth_1.authenticate, async (req, res) => {
     try {
         const userId = req.userId;
+        // Check if user is a coach
         const coach = await prisma.coachProfile.findUnique({
             where: { userId }
         });
-        if (!coach) {
-            return res.status(403).json({ error: 'Access denied. Coach profile required.' });
-        }
-        const challenges = await prisma.challenge.findMany({
-            where: { createdById: coach.id },
-            include: {
-                participants: {
-                    include: {
-                        athlete: {
-                            include: {
-                                user: {
-                                    select: { id: true, name: true, avatar: true }
+        if (coach) {
+            // Return challenges created by this coach
+            const challenges = await prisma.challenge.findMany({
+                where: { createdById: coach.id },
+                include: {
+                    participants: {
+                        include: {
+                            athlete: {
+                                include: {
+                                    user: {
+                                        select: { id: true, name: true, avatar: true }
+                                    }
                                 }
                             }
+                        }
+                    },
+                    _count: {
+                        select: { participants: true }
+                    }
+                },
+                orderBy: { createdAt: 'desc' }
+            });
+            return res.json({ challenges });
+        }
+        // Otherwise, user is an athlete - return their challenges
+        const athlete = await prisma.athleteProfile.findUnique({
+            where: { userId }
+        });
+        if (!athlete) {
+            return res.status(403).json({ error: 'No profile found' });
+        }
+        const participations = await prisma.challengeParticipant.findMany({
+            where: { athleteId: athlete.id },
+            include: {
+                challenge: {
+                    include: {
+                        createdBy: {
+                            include: {
+                                user: {
+                                    select: { name: true }
+                                }
+                            }
+                        },
+                        participants: {
+                            include: {
+                                athlete: {
+                                    include: {
+                                        user: {
+                                            select: { id: true, name: true, avatar: true }
+                                        }
+                                    }
+                                }
+                            },
+                            orderBy: { points: 'desc' }
+                        },
+                        _count: {
+                            select: { participants: true }
+                        }
+                    }
+                }
+            },
+            orderBy: { joinedAt: 'desc' }
+        });
+        const challenges = participations.map(p => ({
+            ...p.challenge,
+            myProgress: p.progress,
+            myPoints: p.points,
+            myRank: p.challenge.participants.findIndex(participant => participant.athleteId === athlete.id) + 1
+        }));
+        res.json({ challenges });
+    }
+    catch (error) {
+        console.error('List challenges error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// GET /api/challenges/available - List available challenges for athlete (not yet joined)
+router.get('/available', auth_1.authenticate, async (req, res) => {
+    try {
+        const userId = req.userId;
+        const athlete = await prisma.athleteProfile.findUnique({
+            where: { userId }
+        });
+        if (!athlete) {
+            return res.status(403).json({ error: 'No athlete profile found' });
+        }
+        // Get challenges where athlete has a coach and the challenge is from that coach
+        // and athlete is not yet a participant
+        const availableChallenges = await prisma.challenge.findMany({
+            where: {
+                status: client_1.ChallengeStatus.ACTIVE,
+                createdById: athlete.coachId || undefined,
+                participants: {
+                    none: {
+                        athleteId: athlete.id
+                    }
+                }
+            },
+            include: {
+                createdBy: {
+                    include: {
+                        user: {
+                            select: { name: true }
                         }
                     }
                 },
@@ -38,10 +128,10 @@ router.get('/', auth_1.authenticate, (0, auth_1.authorizeRole)(['COACH']), async
             },
             orderBy: { createdAt: 'desc' }
         });
-        res.json({ challenges });
+        res.json({ challenges: availableChallenges });
     }
     catch (error) {
-        console.error('List challenges error:', error);
+        console.error('List available challenges error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -313,6 +403,79 @@ router.put('/:id/participants/:participantId', auth_1.authenticate, (0, auth_1.a
     }
     catch (error) {
         console.error('Update participant error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// POST /api/challenges/:id/join - Athlete joins a challenge
+router.post('/:id/join', auth_1.authenticate, async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { id } = req.params;
+        const athlete = await prisma.athleteProfile.findUnique({
+            where: { userId }
+        });
+        if (!athlete) {
+            return res.status(403).json({ error: 'Access denied. Athlete profile required.' });
+        }
+        // Verify challenge exists and is active
+        const challenge = await prisma.challenge.findUnique({
+            where: { id }
+        });
+        if (!challenge) {
+            return res.status(404).json({ error: 'Challenge not found' });
+        }
+        if (challenge.status !== client_1.ChallengeStatus.ACTIVE) {
+            return res.status(400).json({ error: 'Challenge is not active' });
+        }
+        // Check if athlete has a coach
+        if (!athlete.coachId) {
+            return res.status(403).json({ error: 'You need a coach to join challenges' });
+        }
+        // Check if challenge is from athlete's coach
+        if (challenge.createdById !== athlete.coachId) {
+            return res.status(403).json({ error: 'You can only join challenges from your coach' });
+        }
+        // Check if already participating
+        const existingParticipation = await prisma.challengeParticipant.findUnique({
+            where: {
+                challengeId_athleteId: {
+                    challengeId: id,
+                    athleteId: athlete.id
+                }
+            }
+        });
+        if (existingParticipation) {
+            return res.status(400).json({ error: 'Already participating in this challenge' });
+        }
+        // Create participation
+        const participant = await prisma.challengeParticipant.create({
+            data: {
+                challengeId: id,
+                athleteId: athlete.id,
+                progress: 0,
+                points: 0
+            },
+            include: {
+                challenge: {
+                    include: {
+                        createdBy: {
+                            include: {
+                                user: {
+                                    select: { name: true }
+                                }
+                            }
+                        },
+                        _count: {
+                            select: { participants: true }
+                        }
+                    }
+                }
+            }
+        });
+        res.status(201).json({ participant });
+    }
+    catch (error) {
+        console.error('Join challenge error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
